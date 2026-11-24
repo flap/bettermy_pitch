@@ -60,8 +60,8 @@ describe("committeeRound", () => {
 
   it("lets the addressed member answer first, shares the round and clamps state swings", async () => {
     const p = fakeProvider([
-      { say: "SOC 2 first, please.", addressedTo: "seller", action: "pushes_back", interest: 0, trust: 40, reasoning: "Vague." },
-      { say: "", addressedTo: "Tomás", action: "nods", interest: 50, trust: 45, reasoning: "Fair point." },
+      { say: "SOC 2 first, please.", addressedTo: "seller", action: "pushes_back", interest: 0, trust: 40, reasoning: "Vague.", whisper: "Push on pricing." },
+      { say: "", addressedTo: "Tomás", action: "nods", interest: 50, trust: 45, reasoning: "Fair point.", whisper: "" },
     ]);
     const results = await committeeRound({
       ctx,
@@ -76,6 +76,8 @@ describe("committeeRound", () => {
     expect(p.prompts[1]).not.toContain(MUST_SPEAK);
     // The second member sees what the first one said in the same round.
     expect(p.prompts[1]).toContain("SOC 2 first, please.");
+    // ...and the private note they whispered.
+    expect(p.prompts[1]).toContain("Push on pricing.");
     // 45 → 0 is clamped to the maximum swing.
     expect(results[0].decision.interest).toBe(45 - MAX_SWING);
     expect(results[1].decision.say).toBe("");

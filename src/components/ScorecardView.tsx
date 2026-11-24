@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTION_ICON, type Member, type MemberState } from "@/lib/committee";
+import { ACTION_ICON, type DealOutcome, type Member, type MemberState } from "@/lib/committee";
 import { useI18n } from "@/lib/i18n/client";
 import { intlLocale, type Dictionary } from "@/lib/i18n/dictionaries";
 import { CATEGORY_KEYS, type ScorecardReport } from "@/lib/schemas";
@@ -18,6 +18,25 @@ type Meta = {
   model: string;
   turns: number;
 };
+
+type Verdict = {
+  outcome: DealOutcome;
+  votes: {
+    memberId: string;
+    member: Member | null;
+    vote: "advance" | "needs_more" | "reject";
+    headline: string;
+    objections: { objection: string; handled: boolean; quote: string; lineId: string | null }[];
+  }[];
+} | null;
+
+const OUTCOME_STYLE: Record<DealOutcome, { icon: string; tone: string }> = {
+  advanced: { icon: "🤝", tone: "border-good/40 bg-good/5 text-good" },
+  stalled: { icon: "⏸️", tone: "border-warn/40 bg-warn/5 text-warn" },
+  lost: { icon: "🚪", tone: "border-bad/40 bg-bad/5 text-bad" },
+};
+
+const VOTE_TONE = { advance: "bg-good/15 text-good", needs_more: "bg-warn/15 text-warn", reject: "bg-bad/15 text-bad" };
 
 type CommitteeOutcome = { member: Member; start: MemberState; end: MemberState }[];
 
@@ -47,12 +66,14 @@ export function ScorecardView({
   transcript,
   evidence,
   committee,
+  verdict,
 }: {
   report: ScorecardReport;
   meta: Meta;
   transcript: { id: string; role: string; speaker: string | null; content: string }[];
   evidence: Evidence;
   committee: CommitteeOutcome;
+  verdict: Verdict;
 }) {
   const { locale, t } = useI18n();
   const frameworkName = t.frameworks[meta.framework as keyof typeof t.frameworks]?.label ?? meta.framework;
@@ -83,6 +104,56 @@ export function ScorecardView({
           <RotateCcw className="size-4" /> {t.scorecard.practiceAgain}
         </Link>
       </div>
+
+      {verdict && (
+        <section className={cn("space-y-4 rounded-2xl border p-5", OUTCOME_STYLE[verdict.outcome].tone)}>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-2xl font-bold">
+              <span aria-hidden>{OUTCOME_STYLE[verdict.outcome].icon}</span> {t.verdict[verdict.outcome]}
+            </h2>
+            <div className="text-sm font-medium">
+              {verdict.votes.filter((v) => v.vote === "advance").length} {t.verdict.of} {verdict.votes.length}{" "}
+              {t.verdict.votedForward}
+            </div>
+          </div>
+          <div className="grid gap-3 text-foreground md:grid-cols-3">
+            {verdict.votes.map((v) => (
+              <div key={v.memberId} className="space-y-2 rounded-xl border border-border bg-card p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold">
+                    {v.member?.emoji} {v.member?.name ?? v.memberId}
+                  </span>
+                  <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", VOTE_TONE[v.vote])}>
+                    {t.verdict.votes[v.vote]}
+                  </span>
+                </div>
+                <p className="italic">“{v.headline}”</p>
+                <ul className="space-y-2">
+                  {v.objections.map((o, i) => (
+                    <li key={i} className="text-xs">
+                      <div className="flex gap-1.5">
+                        {o.handled ? (
+                          <Check className="mt-0.5 size-3.5 shrink-0 text-good" aria-label={t.verdict.handled} />
+                        ) : (
+                          <X className="mt-0.5 size-3.5 shrink-0 text-bad" aria-label={t.verdict.notHandled} />
+                        )}
+                        <span className="font-medium">{o.objection}</span>
+                      </div>
+                      {o.quote.trim() ? (
+                        <div className="ml-5 text-muted">
+                          “{o.quote}” <EvidenceTag lineId={o.lineId} />
+                        </div>
+                      ) : (
+                        <div className="ml-5 text-muted">{t.verdict.neverAddressed}</div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <Card className="flex flex-col items-center justify-center gap-2 text-center">

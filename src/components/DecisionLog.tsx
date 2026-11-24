@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTION_ICON, firstName, withDeltas, type DecisionEntry, type Member } from "@/lib/committee";
+import { ACTION_ICON, ADAPTATION_ICON, firstName, withDeltas, type DecisionEntry, type Member } from "@/lib/committee";
 import { useI18n } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
@@ -34,11 +34,18 @@ export function DecisionLog({
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
         {entries.length === 0 && <p className="text-sm text-muted">{t.log.empty}</p>}
         {!reveal && entries.length > 0 && <p className="text-sm text-muted">{t.log.hidden}</p>}
-        {rounds.map((round) => (
+        {rounds.map((round) => {
+          const adaptation = entries.find((e) => e.round === round)?.adaptation ?? "steady";
+          return (
           <div key={round} className="space-y-2">
             <div className="text-xs uppercase tracking-wide text-muted">
               {round === 0 ? t.log.opening : `${t.log.round} ${round}`}
             </div>
+            {adaptation !== "steady" && (
+              <div className="rounded-lg bg-accent-soft px-3 py-1.5 text-xs text-accent">
+                {ADAPTATION_ICON[adaptation]} {t.log.adaptation}: {t.adapt[adaptation]}
+              </div>
+            )}
             {entries
               .filter((e) => e.round === round)
               .map((e) => {
@@ -63,11 +70,17 @@ export function DecisionLog({
                       <Change label={t.room.trust} from={e.prevTrust} to={e.trust} />
                     </div>
                     {reveal && e.reasoning && <p className="mt-1.5 text-sm leading-relaxed">“{e.reasoning}”</p>}
+                    {reveal && e.whisper && (
+                      <p className="mt-1 text-xs italic text-coach">
+                        🤫 {t.room.whisper}: “{e.whisper}”
+                      </p>
+                    )}
                   </div>
                 );
               })}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

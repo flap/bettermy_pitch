@@ -1,6 +1,6 @@
 import { SessionArena } from "@/components/SessionArena";
 import type { HintEntry } from "@/components/LiveCoachSidebar";
-import { toAction } from "@/lib/api";
+import { toDecisionEntry } from "@/lib/api";
 import { speechLang } from "@/lib/catalog";
 import { sessionMembers } from "@/lib/committee";
 import { db } from "@/lib/db";
@@ -63,18 +63,7 @@ async function Arena({ params }: { params: Promise<{ id: string }> }) {
         createdAt: m.createdAt.toISOString(),
       }))}
       initialHints={hints}
-      initialDecisions={session.decisions.map((d) => ({
-        id: d.id,
-        round: d.round,
-        memberId: d.memberId,
-        messageId: d.messageId,
-        action: toAction(d.action),
-        addressedTo: d.addressedTo,
-        interest: d.interest,
-        trust: d.trust,
-        reasoning: d.reasoning,
-        createdAt: d.createdAt.toISOString(),
-      }))}
+      initialDecisions={session.decisions.map(toDecisionEntry)}
     />
   );
 }

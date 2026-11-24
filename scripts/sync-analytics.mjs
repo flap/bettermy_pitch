@@ -36,9 +36,12 @@ create table if not exists app.decisions (
   id text primary key, created_at timestamptz not null, session_id text not null, round int not null,
   member_id text not null, message_id text, action text not null, addressed_to text not null,
   interest int not null, trust int not null, reasoning text not null);
+alter table app.decisions add column if not exists whisper text not null default '';
+alter table app.decisions add column if not exists adaptation text not null default 'steady';
 create table if not exists app.scorecards (
   id text primary key, created_at timestamptz not null, session_id text not null unique,
   overall int not null, report jsonb, model text not null);
+alter table app.scorecards add column if not exists verdict jsonb;
 create table if not exists app.persona_templates (
   id text primary key, created_at timestamptz not null, name text not null, title text not null, brief text not null);
 create table if not exists app.sync_status (id int primary key, synced_at timestamptz not null, row_counts jsonb not null);
@@ -88,14 +91,14 @@ async function syncOnce() {
     await insert(
       client,
       "decisions",
-      ["id", "created_at", "session_id", "round", "member_id", "message_id", "action", "addressed_to", "interest", "trust", "reasoning"],
-      decisions.map((d) => [d.id, d.createdAt, d.sessionId, d.round, d.memberId, d.messageId, d.action, d.addressedTo, d.interest, d.trust, d.reasoning]),
+      ["id", "created_at", "session_id", "round", "member_id", "message_id", "action", "addressed_to", "interest", "trust", "reasoning", "whisper", "adaptation"],
+      decisions.map((d) => [d.id, d.createdAt, d.sessionId, d.round, d.memberId, d.messageId, d.action, d.addressedTo, d.interest, d.trust, d.reasoning, d.whisper, d.adaptation]),
     );
     await insert(
       client,
       "scorecards",
-      ["id", "created_at", "session_id", "overall", "report", "model"],
-      scorecards.map((s) => [s.id, s.createdAt, s.sessionId, s.overall, json(s.report), s.model]),
+      ["id", "created_at", "session_id", "overall", "report", "verdict", "model"],
+      scorecards.map((s) => [s.id, s.createdAt, s.sessionId, s.overall, json(s.report), json(s.verdict), s.model]),
     );
     await insert(
       client,

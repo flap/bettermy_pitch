@@ -6,7 +6,7 @@ import {
   frameworkLabel,
   languageLabel,
 } from "./catalog";
-import { firstName, type Member, type MemberState } from "./committee";
+import { firstName, type Adaptation, type Member, type MemberState } from "./committee";
 
 export type SessionContext = {
   /** Practice session id (used to group LLM Observability traces). */
@@ -75,7 +75,7 @@ ${room}
 
 # What is being pitched to you
 ${ctx.product}
-
+${memoryBlock(member)}
 # Your attitude (${difficultyLabel(ctx.difficulty)})
 ${DIFFICULTY_BEHAVIOUR[ctx.difficulty] ?? DIFFICULTY_BEHAVIOUR.skeptical}
 
@@ -93,6 +93,30 @@ Each round you also update how interested you are in buying and how much you tru
 Write "say" and "reasoning" in ${languageLabel(ctx.language)}.`;
 }
 
+function memoryBlock(member: Member) {
+  const m = member.memory;
+  if (!m) return "";
+  return `
+# You have met this seller before
+You have sat through ${m.sessions} earlier meeting${m.sessions === 1 ? "" : "s"} with this seller. Last time you ended with interest ${m.lastInterest} and trust ${m.lastTrust}${
+    m.lastVote ? ` and voted "${m.lastVote}"` : ""
+  }.${m.lastReason ? ` What you remember thinking: "${m.lastReason}"` : ""}${
+    m.weakSpot ? `\nTheir weakest area last time: ${m.weakSpot}` : ""
+  }
+Bring it up when it is relevant ("Last time you couldn't tell me…") and test whether they improved. Reward real improvement.
+`;
+}
+
+const ADAPTATION_TEXT: Record<Adaptation, string> = {
+  steady: "",
+  raise_bar:
+    "Room dynamics: the seller is doing well. Raise the bar: ask your hardest, most specific question, or demand proof of the strongest claim so far.",
+  interrupt:
+    "Room dynamics: the seller just rambled. Whoever speaks first cuts in politely but firmly and asks for the 30-second version.",
+  ease_off:
+    "Room dynamics: the seller is struggling. Stay in character, but give them one clear opening: say plainly what it would take to win you over.",
+};
+
 /** Instruction marker the mock provider also relies on. */
 export const MUST_SPEAK = "You must answer out loud this round.";
 
@@ -104,8 +128,13 @@ export function buyerRoundPrompt(args: {
   colleagues: { member: Member; state: MemberState }[];
   opening: boolean;
   mustSpeak: boolean;
+  adaptation?: Adaptation;
 }) {
-  const { ctx, member, turns, self, colleagues, opening, mustSpeak } = args;
+  const { ctx, member, turns, self, colleagues, opening, mustSpeak, adaptation = "steady" } = args;
+  const whispers = colleagues
+    .filter(({ state }) => state.whisper)
+    .map(({ member: c, state }) => `- ${firstName(c.name)}: "${state.whisper}"`)
+    .join("\n");
   const transcript = turns.length ? formatTranscript(turns.slice(-30), ctx) : "(nothing said yet)";
   const room = colleagues.length
     ? colleagues
@@ -130,10 +159,11 @@ ${transcript}
 What you can see in the room:
 ${room}
 
-Your state before this round: interest ${self.interest}/100, trust ${self.trust}/100.
+${whispers ? `Private notes from your colleagues (the seller can't see these):\n${whispers}\n\n` : ""}Your state before this round: interest ${self.interest}/100, trust ${self.trust}/100.
 
 ${situation}
-${speak}`;
+${ADAPTATION_TEXT[adaptation] ? `${ADAPTATION_TEXT[adaptation]}\n` : ""}${speak}
+Use "whisper" to coordinate with your colleagues about the seller.`;
 }
 
 export function committeeStateLines(members: Member[], states: Record<string, MemberState>) {
@@ -143,7 +173,7 @@ export function committeeStateLines(members: Member[], states: Record<string, Me
       if (!s) return `- ${m.name}: no reaction yet`;
       return `- ${m.name}${m.title ? ` (${m.title})` : ""}: interest ${s.interest}, trust ${s.trust}, ${ACTION_TEXT[s.action] ?? s.action}${
         s.reasoning ? `. Private reason: ${s.reasoning}` : ""
-      }`;
+      }${s.whisper ? `. Whispered to colleagues: "${s.whisper}"` : ""}`;
     })
     .join("\n");
 }
@@ -191,4 +221,20 @@ export function formatTranscript(turns: Turn[], ctx: Pick<SessionContext, "perso
   return turns
     .map((t) => `${t.role === "seller" ? "SELLER" : `BUYER (${t.speaker ?? ctx.personaName})`}: ${t.content}`)
     .join("\n");
+}
+
+/** Prompt for a member's final vote once the seller ends the meeting. */
+export function votePrompt(ctx: SessionContext, member: Member, turns: Turn[], self: MemberState) {
+  return `The meeting is over. Here is the full transcript:
+${formatTranscript(turns, ctx)}
+
+You ended the meeting with interest ${self.interest}/100 and trust ${self.trust}/100${
+    self.action === "leaves_meeting" ? ", and you walked out early" : ""
+  }.${self.reasoning ? ` Your last private thought: "${self.reasoning}"` : ""}
+
+Your colleagues are asking for your vote on this vendor, as ${member.name}. Be consistent with how the meeting actually went.
+- vote: advance, needs_more or reject.
+- headline: one sentence in your own voice.
+- objections: the 1–4 concerns that drove your vote. For each, say whether the seller handled it, and copy the seller's exact words that addressed it from one transcript line (empty string if they never did).
+Write in ${languageLabel(ctx.language)}.`;
 }

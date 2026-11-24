@@ -1,5 +1,5 @@
 import { ZodError } from "zod";
-import { currentStates, sessionMembers } from "./committee";
+import { ADAPTATIONS, currentStates, sessionMembers, type Adaptation, type DecisionEntry } from "./committee";
 import { db } from "./db";
 import { LLMConfigError } from "./llm";
 import { logger } from "./logger";
@@ -62,7 +62,7 @@ export async function loadSession(sessionId: string) {
   const states = currentStates(
     members,
     session.difficulty,
-    session.decisions.map((d) => ({ ...d, action: toAction(d.action) })),
+    session.decisions.map(toDecisionEntry),
   );
   const round = session.decisions.reduce((max, d) => Math.max(max, d.round), -1) + 1;
   return { session, ctx, turns, members, states, round };
@@ -70,4 +70,39 @@ export async function loadSession(sessionId: string) {
 
 export function toAction(value: string): BuyerAction {
   return (BUYER_ACTIONS as readonly string[]).includes(value) ? (value as BuyerAction) : "neutral";
+}
+
+export function toAdaptation(value: string): Adaptation {
+  return (ADAPTATIONS as readonly string[]).includes(value) ? (value as Adaptation) : "steady";
+}
+
+/** Narrow a stored Decision row to the shape the UI and agents use. */
+export function toDecisionEntry(d: {
+  id: string;
+  round: number;
+  memberId: string;
+  messageId: string | null;
+  action: string;
+  addressedTo: string;
+  interest: number;
+  trust: number;
+  reasoning: string;
+  whisper: string;
+  adaptation: string;
+  createdAt: Date;
+}): DecisionEntry {
+  return {
+    id: d.id,
+    round: d.round,
+    memberId: d.memberId,
+    messageId: d.messageId,
+    action: toAction(d.action),
+    addressedTo: d.addressedTo,
+    interest: d.interest,
+    trust: d.trust,
+    reasoning: d.reasoning,
+    whisper: d.whisper,
+    adaptation: toAdaptation(d.adaptation),
+    createdAt: d.createdAt.toISOString(),
+  };
 }

@@ -16,7 +16,17 @@ custom_checks:
     value: 0
 @bruin */
 
-with turns as (
+with votes as (
+    select
+        sc.session_id,
+        count(*) as total_votes,
+        count(*) filter (where v ->> 'vote' = 'advance') as advance_votes,
+        count(*) filter (where v ->> 'vote' = 'reject') as reject_votes
+    from app.scorecards sc
+    cross join lateral jsonb_array_elements(coalesce(sc.verdict, '[]'::jsonb)) as v
+    group by sc.session_id
+),
+turns as (
     select
         session_id,
         count(*) as total_turns,
@@ -51,7 +61,17 @@ select
     (sc.report -> 'categories' -> 'valueArticulation' ->> 'score')::int as value_articulation,
     (sc.report -> 'categories' -> 'concisenessPacing' ->> 'score')::int as conciseness_pacing,
     sc.report ->> 'verdict' as verdict,
+    v.advance_votes,
+    v.total_votes,
+    -- Same rule as the app (dealOutcome): majority advance wins, majority reject loses.
+    case
+        when v.total_votes is null or v.total_votes = 0 then null
+        when v.advance_votes * 2 > v.total_votes then 'advanced'
+        when v.reject_votes * 2 > v.total_votes then 'lost'
+        else 'stalled'
+    end as deal_outcome,
     sc.model as evaluator_model
 from app.sessions s
 left join turns t on t.session_id = s.id
 left join app.scorecards sc on sc.session_id = s.id
+left join votes v on v.session_id = s.id

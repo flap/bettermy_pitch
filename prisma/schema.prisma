@@ -61,6 +61,10 @@ model Decision {
   interest    Int
   trust       Int
   reasoning   String
+  /// Private note to colleagues (never shown to the seller during the call).
+  whisper     String   @default("")
+  /// How the committee adapted this round to the seller's performance.
+  adaptation  String   @default("steady")
 
   @@index([sessionId, createdAt])
 }
@@ -73,6 +77,8 @@ model Scorecard {
   overall   Int
   /// Full evaluator JSON (categories, key moments, rewrites, summary).
   report    String
+  /// Committee deal vote as JSON: [{ memberId, vote, headline, objections }].
+  verdict   String   @default("[]")
   model     String
 }
 

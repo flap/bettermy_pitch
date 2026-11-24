@@ -97,8 +97,33 @@ export const BuyerDecision = z.object({
     .describe(
       "Private, one sentence: why you reacted this way, citing what the seller or a colleague just said. Never shown to the seller during the call.",
     ),
+  whisper: z
+    .string()
+    .describe(
+      "Private note to your colleagues, max 20 words: a tactic to test the seller, a concern, or a heads-up (e.g. \"He dodged pricing twice, push on it\"). Empty string if nothing to coordinate.",
+    ),
 });
 export type BuyerDecision = z.infer<typeof BuyerDecision>;
+
+/** A committee member's final vote when the meeting ends. */
+export const CommitteeVote = z.object({
+  vote: z
+    .enum(["advance", "needs_more", "reject"])
+    .describe("advance = agree to a concrete next step; needs_more = not yet, needs more proof; reject = not buying."),
+  headline: z.string().describe("One sentence, in your voice, explaining your vote to your colleagues."),
+  objections: z
+    .array(
+      z.object({
+        objection: z.string().describe("A concern you or a colleague raised during the meeting."),
+        handled: z.boolean().describe("Did the seller resolve it to your satisfaction?"),
+        quote: z
+          .string()
+          .describe("Exact words from ONE seller line that addressed it (copied verbatim), or empty string if they never did."),
+      }),
+    )
+    .describe("1–4 objections that drove your vote."),
+});
+export type CommitteeVote = z.infer<typeof CommitteeVote>;
 
 export const CATEGORY_KEYS = [
   "discoveryDepth",

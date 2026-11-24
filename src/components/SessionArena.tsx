@@ -184,6 +184,7 @@ export function SessionArena({
           messages={messages}
           reacting={buyerTyping}
           meetingOver={meetingOver}
+          reveal={revealReasons}
         />
         <ChatArena
           session={session}

@@ -1,4 +1,5 @@
-import { evaluateSession } from "@/lib/agents";
+import { committeeVotes, evaluateSession } from "@/lib/agents";
+import { dealOutcome } from "@/lib/committee";
 import { errorResponse, HttpError, loadSession, readJson } from "@/lib/api";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
@@ -18,10 +19,22 @@ export async function POST(req: Request) {
       throw new HttpError(400, "Say at least one thing to the buyer before scoring the session");
     }
 
-    const { report, model } = await evaluateSession(ctx, turns, { members, states });
+    // The evaluator scores the seller while every buyer casts a deal vote.
+    const [{ report, model }, votes] = await Promise.all([
+      evaluateSession(ctx, turns, { members, states }),
+      committeeVotes({ ctx, members, states, turns }),
+    ]);
+    const verdict = votes.map(({ member, vote }) => ({ memberId: member.id, ...vote }));
+    const outcome = dealOutcome(verdict.map((v) => v.vote));
     try {
       const scorecard = await db.scorecard.create({
-        data: { sessionId, overall: report.overallScore, report: JSON.stringify(report), model },
+        data: {
+          sessionId,
+          overall: report.overallScore,
+          report: JSON.stringify(report),
+          verdict: JSON.stringify(verdict),
+          model,
+        },
       });
       await db.session.update({
         where: { id: session.id },
@@ -33,6 +46,7 @@ export async function POST(req: Request) {
           readiness_score: report.overallScore,
           turns: turns.length,
           committee_size: members.length,
+          deal_outcome: outcome,
           model,
         },
         "practice session scored",

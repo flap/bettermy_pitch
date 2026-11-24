@@ -5,7 +5,7 @@ import tracer from "dd-trace";
 // tests), these calls are no-ops.
 const llmobs = tracer.llmobs;
 
-type AgentName = "buyer" | "coach" | "evaluator";
+type AgentName = "buyer" | "coach" | "evaluator" | "vote";
 
 /**
  * Run one agent call inside an LLM Observability `agent` span grouped by the

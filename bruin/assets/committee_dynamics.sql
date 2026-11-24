@@ -27,6 +27,10 @@ select
     count(*) filter (where action in ('leans_in', 'takes_notes', 'nods', 'ready_to_buy')) as positive_signals,
     count(*) filter (where action in ('checks_phone', 'crosses_arms', 'pushes_back', 'leaves_meeting')) as negative_signals,
     bool_or(action = 'ready_to_buy') as reached_ready_to_buy,
-    bool_or(action = 'leaves_meeting') as left_meeting
+    bool_or(action = 'leaves_meeting') as left_meeting,
+    count(*) filter (where whisper <> '') as whispers,
+    count(*) filter (where adaptation = 'raise_bar') as rounds_raised_bar,
+    count(*) filter (where adaptation = 'interrupt') as rounds_interrupted,
+    count(*) filter (where adaptation = 'ease_off') as rounds_eased_off
 from ranked
 group by session_id, member_id

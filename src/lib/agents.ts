@@ -1,6 +1,6 @@
 // The agents: the buying committee (one buyer agent per member), the Live
 // Coach (hints) and the Evaluator (scorecard).
-import { clampSwing, firstName, speakingOrder, type Member, type MemberState } from "./committee";
+import { clampSwing, firstName, hasLeft, speakingOrder, type Adaptation, type Member, type MemberState } from "./committee";
 import { generateObject, getProvider, type LLMProvider } from "./llm";
 import { submitScores, traceAgent } from "./observability";
 
@@ -16,10 +16,11 @@ import {
   committeeStateLines,
   evaluatorSystemPrompt,
   formatTranscript,
+  votePrompt,
   type SessionContext,
   type Turn,
 } from "./prompts";
-import { BuyerDecision, CoachHint, ScorecardReport } from "./schemas";
+import { BuyerDecision, CoachHint, CommitteeVote, ScorecardReport } from "./schemas";
 
 export type RoundResult = { member: Member; decision: BuyerDecision };
 
@@ -46,9 +47,10 @@ export async function committeeRound(args: {
   states: Record<string, MemberState>;
   turns: Turn[];
   sellerText?: string;
+  adaptation?: Adaptation;
   provider?: LLMProvider;
 }): Promise<RoundResult[]> {
-  const { ctx, members, sellerText, provider } = args;
+  const { ctx, members, sellerText, provider, adaptation = "steady" } = args;
   const states = { ...args.states };
   const turns = [...args.turns];
   const order = speakingOrder(members, states, sellerText);
@@ -76,6 +78,7 @@ export async function committeeRound(args: {
             colleagues: colleagues.map((c) => ({ member: c, state: states[c.id] })),
             opening,
             mustSpeak: i === 0,
+            adaptation,
           }),
           schema: BuyerDecision,
           schemaName: "buyer_decision",
@@ -93,9 +96,10 @@ export async function committeeRound(args: {
       addressedTo: colleagueNames.includes(raw.addressedTo.trim().toLowerCase()) ? raw.addressedTo.trim() : "seller",
       interest: clampSwing(previous.interest, raw.interest),
       trust: clampSwing(previous.trust, raw.trust),
+      whisper: raw.whisper.trim().slice(0, 200),
     };
 
-    states[member.id] = { memberId: member.id, ...decision };
+    states[member.id] = { memberId: member.id, ...decision, adaptation };
     if (say) turns.push({ role: "buyer", content: say, speaker: member.name });
     results.push({ member, decision });
   }
@@ -157,4 +161,41 @@ export async function evaluateSession(
       ),
   );
   return { report, model: p.model("eval") };
+}
+
+export type VoteResult = { member: Member; vote: CommitteeVote };
+
+/**
+ * Every committee member votes on the deal when the meeting ends, in parallel.
+ * A member who walked out always votes reject.
+ */
+export async function committeeVotes(args: {
+  ctx: SessionContext;
+  members: Member[];
+  states: Record<string, MemberState>;
+  turns: Turn[];
+  provider?: LLMProvider;
+}): Promise<VoteResult[]> {
+  const { ctx, members, states, turns, provider } = args;
+  return Promise.all(
+    members.map(async (member) => {
+      const colleagues = members.filter((m) => m.id !== member.id);
+      const raw = await traceAgent(
+        "vote",
+        { sessionId: ctx.id ?? "unknown", input: `${turns.length} turns`, tags: { ...sessionTags(ctx), member: member.name } },
+        () =>
+          generateObject({
+            provider,
+            system: buyerSystemPrompt(ctx, member, colleagues),
+            prompt: votePrompt(ctx, member, turns, states[member.id]),
+            schema: CommitteeVote,
+            schemaName: "committee_vote",
+            tier: "chat",
+            maxTokens: CHAT_MAX_TOKENS,
+          }),
+      );
+      const vote: CommitteeVote = hasLeft(states[member.id]) ? { ...raw, vote: "reject" } : raw;
+      return { member, vote };
+    }),
+  );
 }

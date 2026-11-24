@@ -1,6 +1,6 @@
 import { committeeRound } from "@/lib/agents";
 import { errorResponse, HttpError, loadSession, readJson } from "@/lib/api";
-import { hasLeft, type DecisionEntry } from "@/lib/committee";
+import { hasLeft, roomAdaptation, type DecisionEntry } from "@/lib/committee";
 import { db } from "@/lib/db";
 import { RoleplayInput } from "@/lib/schemas";
 
@@ -20,7 +20,9 @@ export async function POST(req: Request) {
     }
 
     const priorTurns = message ? [...turns, { role: "seller" as const, content: message }] : turns;
-    const results = await committeeRound({ ctx, members, states, turns: priorTurns, sellerText: message });
+    // The committee adapts to how the seller is doing before anyone answers.
+    const adaptation = roomAdaptation(members, states, message);
+    const results = await committeeRound({ ctx, members, states, turns: priorTurns, sellerText: message, adaptation });
 
     // Persist only after every agent has answered, so a failed LLM call never
     // leaves a half-finished round (or an orphan seller turn) in the transcript.
@@ -52,6 +54,8 @@ export async function POST(req: Request) {
             interest: decision.interest,
             trust: decision.trust,
             reasoning: decision.reasoning,
+            whisper: decision.whisper,
+            adaptation,
             createdAt: at(),
           },
         });
@@ -65,6 +69,8 @@ export async function POST(req: Request) {
           interest: decision.interest,
           trust: decision.trust,
           reasoning: decision.reasoning,
+          whisper: decision.whisper,
+          adaptation,
           createdAt: d.createdAt.toISOString(),
         });
       }

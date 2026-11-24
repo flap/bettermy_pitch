@@ -40,7 +40,8 @@ export function SessionConfigurator({ templates }: { templates: PersonaTemplateD
       setPersona({ ...builtInPersona(persona.id, locale)!, name: persona.name });
     }
   }
-  const [colleagueIds, setColleagueIds] = useState<string[]>([]);
+  // Default to a full 3-buyer committee; colleagues can be removed.
+  const [colleagueIds, setColleagueIds] = useState<string[]>(["cfo", "security-lead"]);
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);

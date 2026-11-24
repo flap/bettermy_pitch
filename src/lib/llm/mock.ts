@@ -1,5 +1,5 @@
 import { MUST_SPEAK } from "../prompts";
-import type { BuyerAction, BuyerDecision, CoachHint, ScorecardReport } from "../schemas";
+import type { BuyerAction, BuyerDecision, CoachHint, CommitteeVote, ScorecardReport } from "../schemas";
 import type { LLMProvider } from "./types";
 
 // Offline provider (LLM_PROVIDER="mock"): deterministic canned replies so the
@@ -65,7 +65,29 @@ function mockDecision(system: string, prompt: string): BuyerDecision {
       : mustSpeak
         ? BUYER_LINES[round % BUYER_LINES.length]
         : COLLEAGUE_LINES[round % COLLEAGUE_LINES.length];
-  return { say, addressedTo: "seller", action, interest, trust, reasoning: reasons.join(" ") };
+  const whisper =
+    last && !last.includes("?") ? "No discovery questions yet. Let's make them earn the demo." : /\d/.test(last) ? "That number is checkable. Ask for a reference." : "";
+  return { say, addressedTo: "seller", action, interest, trust, reasoning: reasons.join(" "), whisper };
+}
+
+function mockVote(prompt: string): CommitteeVote {
+  const ended = prompt.match(/interest (\d+)\/100 and trust (\d+)\/100/);
+  const interest = ended ? Number(ended[1]) : 50;
+  const sellerLine = prompt.match(/^SELLER: (.*)$/m)?.[1] ?? "";
+  const vote = interest >= 60 ? "advance" : interest >= 35 ? "needs_more" : "reject";
+  return {
+    vote,
+    headline:
+      vote === "advance"
+        ? "They earned a follow-up: let's book the technical deep dive."
+        : vote === "needs_more"
+          ? "Interesting, but I still need proof before I take this to the team."
+          : "Not for us. I never heard how this solves our problem.",
+    objections: [
+      { objection: "What makes this different from tools we tried?", handled: Boolean(sellerLine), quote: sellerLine.slice(0, 80) },
+      { objection: "How do we justify the cost this quarter?", handled: false, quote: "" },
+    ],
+  };
 }
 
 export function mockProvider(): LLMProvider {
@@ -78,6 +100,7 @@ export function mockProvider(): LLMProvider {
     },
     async json({ schemaName, prompt, system }) {
       if (schemaName === "buyer_decision") return JSON.stringify(mockDecision(system, prompt));
+      if (schemaName === "committee_vote") return JSON.stringify(mockVote(prompt));
       if (schemaName === "coach_hint") {
         const hint: CoachHint = {
           signal: "Testing differentiation and ROI before committing time",
